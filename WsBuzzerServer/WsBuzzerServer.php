@@ -38,10 +38,26 @@ class buzzerServer extends WebSocketServer
     protected function process ($user, $message) {
 
         // receiving user message
+
+        // strip message of any non-whitelisted characters
+        $message = preg_replace('/[^a-z0-9 \-\. ]/i', '', $message);
+
+        $cmd = "";
+        $params = "";
+        if ($message == "") {
+            return;
+        } else if (strlen($message) == 1) {
+            $cmd = $message;
+            $params = "";
+        } else {
+            $cmd = substr($message, 0, 1);
+            $params = substr($message, 1);
+        }
+
         switch ($this->users[$user->id]->props["state"]) {
 
             case $this::US_INIT:
-                if (substr($message, 0, 1) == "A") {
+                if ($cmd == "A") {
                     $this->users[$user->id]->props["state"] = $this::US_AUTH;
                     $this->users[$user->id]->props["username"] = substr($message, 1);
                     $this->send($user, "B");
@@ -51,30 +67,35 @@ class buzzerServer extends WebSocketServer
             case $this::US_AUTH:
 
                 // check password using very secure password
-                if ($this->checkPassword($this->config["users"][$this->users[$user->id]->props["username"]], substr($message, 1))) {
-                    $this->users[$user->id]->props["state"] = $this::US_CONNECTED;
-                    $this->users[$user->id]->props["role"] = $this->config["users"][$this->users[$user->id]->props["username"]]["role"];
-                    $this->send($user, "C" . $this->users[$user->id]->props["role"]);
+                if ($cmd == "B") {
+                    if ($this->checkPassword($this->config["users"][$this->users[$user->id]->props["username"]], $params)) {
+                        $this->users[$user->id]->props["state"] = $this::US_CONNECTED;
+                        $this->users[$user->id]->props["role"] = $this->config["users"][$this->users[$user->id]->props["username"]]["role"];
+                        $this->send($user, "C" . $this->users[$user->id]->props["role"]);
 
-                    if ($this->users[$user->id]->props["role"] == $this::UR_BUZZER) {
+                        if ($this->users[$user->id]->props["role"] == $this::UR_BUZZER) {
 
-                        // set status
-                        if ($this->state == $this::GS_ACTIVE) {
-                            $this->users[$user->id]->props["buzzer"] = $this::BS_ACTIVE;
-                        } else {
-                            $this->users[$user->id]->props["buzzer"] = $this::BS_ACTIVE;
-                        }
-                        $this->send($user, "S".$this->users[$user->id]->props["buzzer"]);
-
-                        // send join message to all non-buzzers
-                        foreach ($this->users as $u) {
-                            if ($u->props["role"] != $this::UR_BUZZER) {
-                                $this->send($u, "J" . $user->props["buzzer"] . $user->props["username"]);
+                            // set status
+                            if ($this->state == $this::GS_ACTIVE) {
+                                $this->users[$user->id]->props["buzzer"] = $this::BS_ACTIVE;
+                            } else {
+                                $this->users[$user->id]->props["buzzer"] = $this::BS_INACTIVE;
                             }
+                            $this->send($user, "Z".$this->users[$user->id]->props["buzzer"]);
+
+                            // send join message to all non-buzzers
+                            foreach ($this->users as $u) {
+                                if ($u->props["role"] != $this::UR_BUZZER) {
+                                    $this->send($u, "J" . $user->props["buzzer"] . $user->props["username"]);
+                                }
+                            }
+
                         }
 
+                    } else {
+                        $this->users[$user->id]->props["state"] = $this::US_INIT;
+                        $this->send($user, "A");
                     }
-
                 } else {
                     $this->users[$user->id]->props["state"] = $this::US_INIT;
                     $this->send($user, "A");
@@ -83,10 +104,10 @@ class buzzerServer extends WebSocketServer
 
             case $this::US_CONNECTED:
 
-                switch (substr($message, 0, 1)) {
+                switch ($cmd) {
 
                     case "R":
-                        // reset
+                        // reset all buzzer, ready for next round
                         $this->state = $this::GS_ACTIVE;
                         if ($this->users[$user->id]->props["role"] == $this::UR_ADMIN) {
                             foreach ($this->users as $u) {
@@ -99,30 +120,40 @@ class buzzerServer extends WebSocketServer
                         break;
 
                     case "Z":
+
                         // buzz
                         if ($this->users[$user->id]->props["role"] == $this::UR_BUZZER) {
-                            if ($this->state == $this::GS_ACTIVE) {
-                                $this->state = $this::GS_INACTIVE;
-                                foreach ($this->users as $u) {
-                                    if ($u->props["role"] == $this::UR_BUZZER) {
-                                        if ($u->id == $user->id) {
-                                            $this->users[$user->id]->props["buzzer"] = $this::BS_WINNER;
-                                            $this->send($u, "Z".$this::BS_WINNER);
-                                        } else {
-                                            $this->users[$user->id]->props["buzzer"] = $this::BS_INACTIVE;
-                                            $this->send($u, "Z".$this::BS_INACTIVE);
+
+                            // check to see if not hammering the button
+                            if ($this->users[$user->id]->props["wait"] < microtime(true)) {
+
+                                $this->users[$user->id]->props["wait"] = microtime(true) + $this->config["wait"];
+
+                                if ($this->state == $this::GS_ACTIVE) {
+                                    $this->state = $this::GS_INACTIVE;
+                                    foreach ($this->users as $u) {
+                                        if ($u->props["role"] == $this::UR_BUZZER) {
+                                            if ($u->id == $user->id) {
+                                                $this->users[$user->id]->props["buzzer"] = $this::BS_WINNER;
+                                                $this->send($u, "Z".$this::BS_WINNER);
+                                            } else {
+                                                $this->users[$user->id]->props["buzzer"] = $this::BS_INACTIVE;
+                                                $this->send($u, "Z".$this::BS_INACTIVE);
+                                            }
                                         }
                                     }
-                                }
 
-                                foreach ($this->users as $u) {
-                                    if ($u->props["role"] != $this::UR_BUZZER) {
-                                        $this->send($u, "G".$this::GS_INACTIVE);
-                                        $this->send($u, "S".$this->getStatus());
+                                    foreach ($this->users as $u) {
+                                        if ($u->props["role"] != $this::UR_BUZZER) {
+                                            $this->send($u, "G".$this::GS_INACTIVE);
+                                            $this->send($u, "S".$this->getStatus());
+                                        }
                                     }
+
                                 }
 
                             }
+
                         }
                         break;
 

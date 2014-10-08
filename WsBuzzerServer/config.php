@@ -7,6 +7,9 @@
  */
 
     $config = array(
+
+        "mustwait" => 500,
+
         "users" => array(
             "admin" => array(
                 "password" => "admin",
