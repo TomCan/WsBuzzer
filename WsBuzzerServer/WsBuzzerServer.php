@@ -149,10 +149,10 @@ class buzzerServer extends WebSocketServer
                                     foreach ($this->users as $u) {
                                         if ($u->props["role"] == $this::UR_BUZZER) {
                                             if ($u->id == $user->id) {
-                                                $this->users[$user->id]->props["buzzer"] = $this::BS_WINNER;
+                                                $this->users[$u->id]->props["buzzer"] = $this::BS_WINNER;
                                                 $this->send($u, "Z".$this::BS_WINNER);
                                             } else {
-                                                $this->users[$user->id]->props["buzzer"] = $this::BS_INACTIVE;
+                                                $this->users[$u->id]->props["buzzer"] = $this::BS_INACTIVE;
                                                 $this->send($u, "Z".$this::BS_INACTIVE);
                                             }
                                         }
