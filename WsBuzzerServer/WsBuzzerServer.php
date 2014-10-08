@@ -90,6 +90,13 @@ class buzzerServer extends WebSocketServer
                                 }
                             }
 
+                        } else if ($this->users[$user->id]->props["role"] == $this::UR_VIEWER) {
+                            // send status for all buzzers
+                            foreach ($this->users as $u) {
+                                if ($u->props["role"] == $this::UR_BUZZER) {
+                                    $this->send($user, "J" . $u->props["buzzer"] . $u->props["username"]);
+                                }
+                            }
                         }
 
                     } else {
