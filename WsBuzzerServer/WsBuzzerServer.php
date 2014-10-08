@@ -190,11 +190,19 @@ class buzzerServer extends WebSocketServer
     }
 
     protected function closed ($user) {
-        // Do nothing: This is where cleanup would go, in case the user had any sort of
-        // open files or other objects associated with them.  This runs after the socket
-        // has been closed, so there is no need to clean up the socket itself here.
+
+        // client disconnected, notify other clients of this if needed
+
         echo "Client disconnected";
         unset($this->users[$user->id]);
+
+        // send leave message to non-buzzers
+        foreach ($this->users as $u) {
+            if ($u->props["role"] != $this::UR_BUZZER) {
+                $this->send($u, "L" . $user->props["username"]);
+            }
+        }
+
     }
 
     private function checkPassword($user, $password) {
