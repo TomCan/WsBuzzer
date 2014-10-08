@@ -124,6 +124,14 @@ class buzzerServer extends WebSocketServer
                                 }
                             }
                         }
+
+                        foreach ($this->users as $u) {
+                            if ($u->props["role"] != $this::UR_BUZZER) {
+                                $this->send($u, "G".$this::GS_INACTIVE);
+                                $this->send($u, "S".$this->getStatus());
+                            }
+                        }
+
                         break;
 
                     case "Z":
